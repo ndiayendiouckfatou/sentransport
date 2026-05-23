@@ -11,7 +11,7 @@ pinned: false
 Assistant pre-diagnostic medical pour le Senegal.
 
 ## Demo en ligne
-https://ndiouckfatou-sensante.hf.space
+https://Ndiouckfatou-sensante.hf.space
 
 ## Stack
 - scikit-learn (modele ML)
@@ -21,4 +21,4 @@ https://ndiouckfatou-sensante.hf.space
 - Docker (conteneurisation)
 
 ## Auteur
-Ndiay - L2 GLSI - ESP/UCAD - 2026
+Ndiouck Fatou Ndiaye - L2 GLSI - ESP/UCAD - 2026

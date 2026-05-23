@@ -3,6 +3,21 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 import joblib
 import numpy as np
+import os
+from dotenv import load_dotenv
+from groq import Groq
+
+load_dotenv()
+
+groq_client = None
+groq_api_key = os.getenv("GROQ_API_KEY")
+if groq_api_key:
+    groq_client = Groq(api_key=groq_api_key)
+    print("Client Groq initialise.")
+else:
+    print("ATTENTION : GROQ_API_KEY non trouvee. /explain sera desactive.")
+
+
 
 # --- Schemas Pydantic ---
 class PatientInput(BaseModel):
@@ -21,6 +36,17 @@ class DiagnosticOutput(BaseModel):
     confiance: str
     message: str
 
+class ExplainInput(BaseModel):
+    diagnostic: str = Field(...)
+    probabilite: float = Field(...)
+    age: int = Field(...)
+    sexe: str = Field(...)
+    temperature: float = Field(...)
+    region: str = Field(...)
+
+class ExplainOutput(BaseModel):
+    explication: str = Field(...)
+    modele_llm: str = Field(default="llama-3.1-8b-instant")
 # --- Application FastAPI ---
 app = FastAPI(
     title="SenSante API",
@@ -81,9 +107,47 @@ def predict(patient: PatientInput):
         "typh": "Suspicion de typhoide. Consultation necessaire.",
         "sain": "Pas de pathologie detectee."
     }
+    
+   
     return DiagnosticOutput(
         diagnostic=diagnostic,
         probabilite=round(proba_max, 2),
         confiance=confiance,
         message=messages.get(diagnostic, "Consultez un medecin.")
+    ) 
+SYSTEM_PROMPT = """Tu es un assistant medical senegalais.
+Tu recois un diagnostic et des donnees patient.
+Explique le resultat en francais simple,
+comme un medecin parlerait a son patient.
+Sois rassurant mais recommande toujours une consultation medicale.
+Maximum 3 phrases.
+Ne fais JAMAIS de diagnostic toi-meme.
+Tu expliques uniquement le diagnostic fourni."""
+
+@app.post("/explain", response_model=ExplainOutput)
+def explain(data: ExplainInput):
+    if not groq_client:
+        return ExplainOutput(
+            explication="Service d'explication indisponible. Cle API non configuree.",
+            modele_llm="aucun"
+        )
+    user_prompt = (
+        f"Patient : {data.sexe}, {data.age} ans, region {data.region}\n"
+        f"Temperature : {data.temperature}C\n"
+        f"Diagnostic du modele : {data.diagnostic} (probabilite {data.probabilite:.0%})\n"
+        f"Explique ce resultat au patient."
     )
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=200,
+            temperature=0.3
+        )
+        explication = response.choices[0].message.content
+    except Exception as e:
+        explication = f"Erreur lors de l'appel au LLM : {str(e)}"
+    return ExplainOutput(explication=explication)
